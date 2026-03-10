@@ -1,25 +1,59 @@
 "use client";
 
-import { Calendar, Clock, Sparkles, Settings, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Calendar, Clock, Sparkles, Settings, LogOut, MessageSquare, Loader2, MapPin, Lock } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { TurnoChat } from "@/components/ui/TurnoChat";
+
+const CLIENT_ID = 'e5d8a4e2-29f2-4f00-9b5a-63af08ed1906'; // Mocked Cliente (Gonzalo Ginestar)
 
 export default function ClientDashboard() {
-    const APPOINTMENTS = [
-        {
-            id: "1",
-            artist: "Elena Black",
-            date: "15 Mar, 2024",
-            time: "10:00 AM",
-            status: "Pendiente",
-            image: "https://images.unsplash.com/photo-1590247813693-5541d1c609fd?q=80&w=800&auto=format&fit=crop",
+    const [turnos, setTurnos] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [activeTurnoId, setActiveTurnoId] = useState<number | null>(null);
+    const [chatArtistName, setChatArtistName] = useState("");
+
+    useEffect(() => {
+        async function fetchTurnos() {
+            const { data, error } = await supabase
+                .from('turnos')
+                .select('*, tatuadores(nombre_artistico, foto_perfil_url, ubicacion)')
+                .eq('cliente_id', CLIENT_ID)
+                .order('created_at', { ascending: false });
+
+            if (data) setTurnos(data);
+            setLoading(false);
         }
-    ];
+        fetchTurnos();
+    }, []);
+
+    const openChat = (turnoId: number, artistName: string) => {
+        setActiveTurnoId(turnoId);
+        setChatArtistName(artistName);
+        setIsChatOpen(true);
+    };
+
+    const getStatusStyles = (status: string) => {
+        switch (status?.toLowerCase()) {
+            case 'aceptado': return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+            case 'rechazado': return 'bg-red-500/10 border-red-500/20 text-red-400';
+            case 'consulta': return 'bg-blue-500/10 border-blue-500/20 text-blue-400';
+            default: return 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'; // pendiente
+        }
+    };
+
+    const getStatusText = (status: string) => {
+        return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Pendiente';
+    };
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-6">
                 <div>
-                    <h1 className="text-4xl font-bold mb-2">Hola, <span className="text-gradient">Alex</span></h1>
-                    <p className="text-zinc-500">Gestiona tus turnos y simulaciones de tatuajes</p>
+                    <h1 className="text-4xl font-bold mb-2">Hola, <span className="text-gradient">Gonzalo</span></h1>
+                    <p className="text-zinc-500">Gestiona tus turnos y comunícate con tus tatuadores</p>
                 </div>
                 <div className="flex space-x-4">
                     <button className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
@@ -38,29 +72,59 @@ export default function ClientDashboard() {
                 <div className="lg:col-span-2 space-y-6">
                     <h2 className="text-xl font-bold flex items-center">
                         <Calendar className="w-5 h-5 mr-3 text-accent" />
-                        Próximos Turnos
+                        Mis Turnos
                     </h2>
 
-                    {APPOINTMENTS.map(apt => (
-                        <div key={apt.id} className="glass p-6 rounded-3xl border-white/10 flex flex-col md:flex-row gap-6 items-center">
-                            <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0">
-                                <img src={apt.image} alt={apt.artist} className="w-full h-full object-cover" />
-                            </div>
-                            <div className="flex-1 text-center md:text-left">
-                                <h3 className="text-lg font-bold">{apt.artist}</h3>
-                                <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-2 text-sm text-zinc-400">
-                                    <div className="flex items-center"><Calendar className="w-4 h-4 mr-1.5" /> {apt.date}</div>
-                                    <div className="flex items-center"><Clock className="w-4 h-4 mr-1.5" /> {apt.time}</div>
-                                </div>
-                            </div>
-                            <div className="flex flex-col items-center md:items-end gap-3">
-                                <span className="px-4 py-1.5 bg-accent/10 border border-accent/20 rounded-full text-accent text-xs font-bold uppercase tracking-wider">
-                                    {apt.status}
-                                </span>
-                                <button className="text-sm font-medium text-zinc-500 hover:text-white transition-colors">Cancelar</button>
-                            </div>
+                    {loading ? (
+                        <div className="flex justify-center p-12">
+                            <Loader2 className="w-8 h-8 animate-spin text-accent" />
                         </div>
-                    ))}
+                    ) : turnos.length === 0 ? (
+                        <div className="glass p-12 rounded-3xl border-white/10 text-center text-zinc-500">
+                            No tienes turnos solicitados.
+                        </div>
+                    ) : (
+                        turnos.map(apt => {
+                            const artistInfo = apt.tatuadores || {};
+                            const isChatEnabled = apt.estado === 'aceptado' || apt.estado === 'consulta';
+
+                            return (
+                                <div key={apt.id} className="glass p-6 rounded-3xl border-white/10 flex flex-col md:flex-row gap-6 items-center hover:bg-white/5 transition-colors">
+                                    <div className="w-24 h-24 rounded-2xl overflow-hidden flex-shrink-0 bg-zinc-800">
+                                        <img src={artistInfo.foto_perfil_url || "https://images.unsplash.com/photo-1590247813693-5541d1c609fd?q=80&w=800"} alt="Tatuador" className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex-1 text-center md:text-left">
+                                        <h3 className="text-lg font-bold">{artistInfo.nombre_artistico || "Tatuador"}</h3>
+                                        <div className="flex flex-col gap-2 mt-2 text-sm text-zinc-400">
+                                            <div className="flex flex-wrap justify-center md:justify-start gap-4">
+                                                <div className="flex items-center"><Calendar className="w-4 h-4 mr-1.5" /> {apt.fecha_sugerida || "A convenir"}</div>
+                                                <div className="flex items-center"><MapPin className="w-4 h-4 mr-1.5" /> {artistInfo.ubicacion || "Buenos Aires"}</div>
+                                            </div>
+                                            <div className="italic text-xs">&quot;{apt.comentarios}&quot;</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-center md:items-end gap-3 w-full md:w-auto">
+                                        <span className={`px-4 py-1.5 border rounded-full text-xs font-bold uppercase tracking-wider ${getStatusStyles(apt.estado)}`}>
+                                            {getStatusText(apt.estado)}
+                                        </span>
+                                        
+                                        <button 
+                                            onClick={() => openChat(apt.id, artistInfo.nombre_artistico)}
+                                            disabled={!isChatEnabled}
+                                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all w-full justify-center ${
+                                                isChatEnabled 
+                                                ? "bg-white/10 text-white hover:bg-white/20 border border-white/20" 
+                                                : "bg-zinc-900 text-zinc-600 cursor-not-allowed border border-white/5"
+                                            }`}
+                                        >
+                                            {isChatEnabled ? <MessageSquare className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                                            <span>Ir al Chat</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
 
                 {/* AI Simulations Sidebar */}
@@ -73,7 +137,7 @@ export default function ClientDashboard() {
                         <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
                             <Sparkles className="w-8 h-8 text-accent" />
                         </div>
-                        <p className="text-sm text-zinc-500 mb-6">Aún no tienes simulaciones guardadas.</p>
+                        <p className="text-sm text-zinc-500 mb-6">Usa nuestras herramientas IA al reservar tu próximo turno.</p>
                         <button className="w-full py-4 border border-accent/30 text-accent font-bold rounded-2xl hover:bg-accent/5 transition-all">
                             Nueva Simulación
                         </button>
@@ -81,6 +145,16 @@ export default function ClientDashboard() {
                 </div>
 
             </div>
+
+            {activeTurnoId && (
+                <TurnoChat
+                    isOpen={isChatOpen}
+                    onClose={() => setIsChatOpen(false)}
+                    turnoId={activeTurnoId}
+                    currentUserId={CLIENT_ID}
+                    otherPartyName={chatArtistName}
+                />
+            )}
         </div>
     );
 }

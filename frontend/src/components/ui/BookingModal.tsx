@@ -68,11 +68,13 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
         setLoading(true);
 
         try {
+            const CLIENT_ID = 'e5d8a4e2-29f2-4f00-9b5a-63af08ed1906'; // Mocked Cliente (Gonzalo Ginestar)
             const { error } = await supabase
                 .from('turnos')
                 .insert([
                     {
                         tatuador_id: artistId,
+                        cliente_id: CLIENT_ID,
                         fecha_sugerida: selectedDate,
                         zona_cuerpo_url: "https://via.placeholder.com/reference-body",
                         comentarios: designIdea,

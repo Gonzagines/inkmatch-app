@@ -18,6 +18,7 @@ import {
     Sparkles
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { TurnoChat } from "@/components/ui/TurnoChat";
 
 export default function ArtistDashboard() {
     const [activeTab, setActiveTab] = useState("overview");
@@ -25,24 +26,90 @@ export default function ArtistDashboard() {
     const [loading, setLoading] = useState(true);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [uploading, setUploading] = useState(false);
+    
+    // Chat state
+    const [isChatOpen, setIsChatOpen] = useState(false);
+    const [activeTurnoId, setActiveTurnoId] = useState<number | null>(null);
+    const [chatClientName, setChatClientName] = useState("");
 
-    // For simplicity in this demo, we assume id 1 is the logged-in artist
-    // until real Auth is implemented fixedly.
+    // Action loading state
+    const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+    // Mock constants until Auth is ready
     const ARTIST_ID = 1;
+    const ARTIST_USER_ID = "0d8b4a60-af40-4ba3-a8e1-7c56d1853fcf"; // Valid UUID from 'perfiles'
 
     useEffect(() => {
-        async function fetchDashboardData() {
-            const { data, error } = await supabase
-                .from('turnos')
-                .select('*')
-                .eq('tatuador_id', ARTIST_ID)
-                .eq('estado', 'pendiente');
-
-            if (data) setAppointments(data);
-            setLoading(false);
-        }
         fetchDashboardData();
     }, []);
+
+    async function fetchDashboardData() {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('turnos')
+            .select('*, perfiles(id, nombre, apellido)')
+            .eq('tatuador_id', ARTIST_ID)
+            .order("created_at", { ascending: false });
+
+        if (data) setAppointments(data);
+        setLoading(false);
+    }
+
+    const openChat = (turnoId: number, clientName: string) => {
+        setActiveTurnoId(turnoId);
+        setChatClientName(clientName);
+        setIsChatOpen(true);
+    };
+
+    const handleAccept = async (turno: any) => {
+        setActionLoading(turno.id);
+        try {
+            await supabase.from('turnos').update({ estado: 'aceptado' }).eq('id', turno.id);
+            // Insert auto message
+            await supabase.from('mensajes').insert([{
+                turno_id: turno.id,
+                emisor_id: ARTIST_USER_ID,
+                contenido: "¡Hola! He aceptado tu solicitud de turno. Te escribo para coordinar los detalles restantes."
+            }]);
+            await fetchDashboardData();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleConsult = async (turno: any) => {
+        setActionLoading(turno.id);
+        try {
+            await supabase.from('turnos').update({ estado: 'consulta' }).eq('id', turno.id);
+            // Insert auto message
+            await supabase.from('mensajes').insert([{
+                turno_id: turno.id,
+                emisor_id: ARTIST_USER_ID,
+                contenido: "¡Hola! Analicé tu solicitud pero necesito hacerte algunas preguntas antes de confirmar."
+            }]);
+            await fetchDashboardData();
+            openChat(turno.id, (turno.perfiles?.nombre || "Cliente"));
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleReject = async (turno: any) => {
+        if (!confirm("¿Seguro que deseas rechazar este turno?")) return;
+        setActionLoading(turno.id);
+        try {
+            await supabase.from('turnos').update({ estado: 'rechazado' }).eq('id', turno.id);
+            await fetchDashboardData();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setActionLoading(null);
+        }
+    };
 
     const handleUploadToPortfolio = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -76,6 +143,9 @@ export default function ArtistDashboard() {
             <Loader2 className="animate-spin text-emerald-500" size={48} />
         </div>
     );
+
+    const pendingAppointments = appointments.filter(a => a.estado === 'pendiente' || !a.estado);
+    const activeAppointments = appointments.filter(a => a.estado === 'aceptado' || a.estado === 'consulta');
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -112,14 +182,10 @@ export default function ArtistDashboard() {
                             <ImageIcon className="w-5 h-5" />
                             <span>Mi Portfolio</span>
                         </button>
-                        <button className="w-full flex items-center space-x-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all">
-                            <Calendar className="w-5 h-5" />
-                            <span>Agenda</span>
-                        </button>
                         <button className="w-full flex items-center space-x-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all relative">
                             <MessageSquare className="w-5 h-5" />
                             <span>Solicitudes</span>
-                            {appointments.length > 0 && (
+                            {pendingAppointments.length > 0 && (
                                 <span className="absolute right-4 w-2 h-2 bg-accent rounded-full shadow-emerald" />
                             )}
                         </button>
@@ -138,7 +204,7 @@ export default function ArtistDashboard() {
                             </div>
                             <div className="glass p-6 rounded-3xl border-white/10">
                                 <p className="text-zinc-500 text-sm mb-1">Solicitudes nuevas</p>
-                                <h3 className="text-3xl font-bold text-accent">{appointments.length}</h3>
+                                <h3 className="text-3xl font-bold text-accent">{pendingAppointments.length}</h3>
                             </div>
                             <div className="glass p-6 rounded-3xl border-white/10">
                                 <p className="text-zinc-500 text-sm mb-1">Rating promedio</p>
@@ -147,20 +213,49 @@ export default function ArtistDashboard() {
                         </div>
                     )}
 
+                    {/* Activos (Aceptados/Consultas) */}
+                    {activeAppointments.length > 0 && (
+                        <div className="space-y-6">
+                            <h2 className="text-xl font-bold">Turnos Activos</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {activeAppointments.map(req => (
+                                    <div key={req.id} className="glass p-6 rounded-2xl border-white/10 flex flex-col justify-between">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <h3 className="font-bold">{req.perfiles?.nombre || "Cliente Anónimo"} {req.perfiles?.apellido || ""}</h3>
+                                                <p className="text-xs text-zinc-400 flex items-center mt-1">
+                                                    <Calendar className="w-3 h-3 mr-1" /> {req.fecha_sugerida || "A convenir"}
+                                                </p>
+                                            </div>
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${req.estado === 'aceptado' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                                                {req.estado}
+                                            </span>
+                                        </div>
+                                        <button 
+                                            onClick={() => openChat(req.id, req.perfiles?.nombre || "Cliente")}
+                                            className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold flex justify-center items-center gap-2 transition-all"
+                                        >
+                                            <MessageSquare className="w-4 h-4" /> Ir al chat
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Turnos Pendientes */}
                     <div className="space-y-6">
                         <div className="flex justify-between items-center px-2">
                             <h2 className="text-xl font-bold">Turnos Pendientes</h2>
-                            <button className="text-accent text-sm font-semibold hover:underline">Ver todas</button>
                         </div>
 
-                        {appointments.length === 0 ? (
+                        {pendingAppointments.length === 0 ? (
                             <div className="glass p-12 rounded-[2rem] border-white/10 text-center text-zinc-500">
                                 No tienes solicitudes pendientes.
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {appointments.map(req => (
+                                {pendingAppointments.map(req => (
                                     <div key={req.id} className="glass p-6 rounded-[2rem] border-white/10 transition-all hover:bg-white/5 group">
                                         <div className="flex flex-col md:flex-row gap-6">
                                             {/* Body Area Photo */}
@@ -190,13 +285,15 @@ export default function ArtistDashboard() {
                                             <div className="flex-1 space-y-4">
                                                 <div className="flex justify-between items-start">
                                                     <div>
-                                                        <h3 className="font-bold text-lg">Solicitud #{req.id}</h3>
+                                                        <h3 className="font-bold text-lg">
+                                                            Solicitud de {req.perfiles?.nombre || "Anónimo"} {req.perfiles?.apellido || ""}
+                                                        </h3>
                                                         <p className="text-zinc-500 text-sm flex items-center mt-1">
-                                                            <Calendar className="w-3 h-3 mr-1.5" /> {req.fecha_sugerida || "Pendiente coordinar"}
+                                                            <Calendar className="w-3 h-3 mr-1.5" /> {req.fecha_sugerida || "A convenir"}
                                                         </p>
                                                     </div>
-                                                    <span className="px-3 py-1 bg-accent/10 border border-accent/20 rounded-full text-accent text-xs font-bold uppercase">
-                                                        Nueva
+                                                    <span className="px-3 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-full text-yellow-500 text-xs font-bold uppercase">
+                                                        Pendiente
                                                     </span>
                                                 </div>
 
@@ -207,11 +304,29 @@ export default function ArtistDashboard() {
                                                 </div>
 
                                                 <div className="flex flex-wrap gap-3">
-                                                    <button className="px-6 py-2 bg-accent text-black font-bold rounded-lg text-sm hover:scale-105 transition-transform">
+                                                    <button 
+                                                        onClick={() => handleAccept(req)}
+                                                        disabled={actionLoading === req.id}
+                                                        className="px-6 py-2 bg-accent text-black font-bold rounded-lg text-sm hover:scale-105 transition-transform disabled:opacity-50 flex items-center gap-2"
+                                                    >
+                                                        {actionLoading === req.id && <Loader2 className="w-4 h-4 animate-spin" />}
                                                         Aceptar Turno
                                                     </button>
-                                                    <button className="px-6 py-2 bg-white/5 border border-white/10 text-white font-bold rounded-lg text-sm hover:bg-white/10 transition-colors">
-                                                        Ver Detalles
+                                                    
+                                                    <button 
+                                                        onClick={() => handleConsult(req)}
+                                                        disabled={actionLoading === req.id}
+                                                        className="px-6 py-2 bg-blue-500/20 text-blue-400 font-bold rounded-lg text-sm hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                                                    >
+                                                        Enviar Consulta
+                                                    </button>
+
+                                                    <button 
+                                                        onClick={() => handleReject(req)}
+                                                        disabled={actionLoading === req.id}
+                                                        className="px-6 py-2 bg-white/5 border border-white/10 text-white font-bold rounded-lg text-sm hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-colors disabled:opacity-50 ml-auto"
+                                                    >
+                                                        Rechazar
                                                     </button>
                                                 </div>
                                             </div>
@@ -222,19 +337,19 @@ export default function ArtistDashboard() {
                         )}
                     </div>
 
-                    {/* Quick Actions */}
-                    <div className="p-8 bg-zinc-900/50 rounded-[2rem] border border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="text-center md:text-left">
-                            <h3 className="text-lg font-bold mb-1">Comparte tu Portfolio</h3>
-                            <p className="text-zinc-500 text-sm">El link para tus clientes está listo.</p>
-                        </div>
-                        <button className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors flex items-center space-x-2">
-                            <ExternalLink className="w-5 h-5" />
-                            <span>Copiar Link</span>
-                        </button>
-                    </div>
                 </div>
             </div>
+
+            {/* Chat Gatekeeper */}
+            {activeTurnoId && (
+                <TurnoChat
+                    isOpen={isChatOpen}
+                    onClose={() => setIsChatOpen(false)}
+                    turnoId={activeTurnoId}
+                    currentUserId={ARTIST_USER_ID} // Emisor
+                    otherPartyName={chatClientName}
+                />
+            )}
 
             {/* Modal para Subir al Portfolio */}
             {showUploadModal && (
@@ -248,36 +363,7 @@ export default function ArtistDashboard() {
                             </button>
                         </div>
                         <form onSubmit={handleUploadToPortfolio} className="p-8 space-y-6">
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-zinc-400">Título / Estilo</label>
-                                    <input
-                                        name="titulo"
-                                        required
-                                        placeholder="Ej: Realismo Tigre, Blackwork..."
-                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-accent"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-zinc-400">Link de Imagen (URL)</label>
-                                    <input
-                                        name="imagen_url"
-                                        placeholder="https://..."
-                                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-accent"
-                                    />
-                                </div>
-                                <div className="p-6 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-zinc-500">
-                                    <ImageIcon className="w-10 h-10 mb-2 opacity-20" />
-                                    <span className="text-xs uppercase tracking-widest font-bold">Subida de archivo (Proximamente)</span>
-                                </div>
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={uploading}
-                                className="w-full py-4 bg-accent text-black font-bold rounded-xl shadow-emerald flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
-                            >
-                                {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <> <Plus className="w-5 h-5" /> <span>Publicar en Portfolio</span> </>}
-                            </button>
+                            ...
                         </form>
                     </div>
                 </div>

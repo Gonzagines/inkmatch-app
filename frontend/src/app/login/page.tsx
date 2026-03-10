@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -79,14 +80,37 @@ interface ScheduleSlot {
 }
 
 export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+                <Loader2 className="animate-spin text-emerald-500" size={48} />
+            </div>
+        }>
+            <LoginContent />
+        </Suspense>
+    );
+}
+
+function LoginContent() {
+    const searchParams = useSearchParams();
+    const initialMode = searchParams.get('mode') === 'register' ? 'register' : 'login';
+
     // Auth mode
-    const [mode, setMode] = useState<'login' | 'register'>('login');
+    const [mode, setMode] = useState<'login' | 'register'>(initialMode);
     const [role, setRole] = useState<'cliente' | 'tatuador'>('cliente');
+
+    // Sync mode if query param changes
+    useEffect(() => {
+        const m = searchParams.get('mode');
+        if (m === 'register') setMode('register');
+        else if (m === 'login') setMode('login');
+    }, [searchParams]);
 
     // Shared fields
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const isPasswordSecure = password.length >= 8 && /[A-Z]/.test(password) && /[^A-Za-z0-9]/.test(password);
 
     // Profile fields
     const [nombre, setNombre] = useState('');
@@ -105,7 +129,7 @@ export default function LoginPage() {
 
     // Schedule slots (multiple)
     const [scheduleSlots, setScheduleSlots] = useState<ScheduleSlot[]>([
-        { id: crypto.randomUUID(), dias: [], horaInicio: '09:00', horaFin: '18:00' }
+        { id: 'initial-slot', dias: [], horaInicio: '09:00', horaFin: '18:00' }
     ]);
 
     // UI state
@@ -185,7 +209,15 @@ export default function LoginPage() {
 
             const { error: profileError } = await supabase
                 .from('perfiles')
-                .insert({ id: userId, email, nombre, apellido, telefono, ubicacion, rol: role });
+                .insert({ 
+                    id: userId, 
+                    email, 
+                    nombre, 
+                    apellido, 
+                    telefono, 
+                    ubicacion: role === 'tatuador' ? ubicacionEstudio : ubicacion, 
+                    rol: role 
+                });
 
             if (profileError) throw profileError;
 
@@ -381,33 +413,53 @@ export default function LoginPage() {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Contraseña</label>
+                                    <div className="flex justify-between items-end">
+                                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Contraseña</label>
+                                        <div className="flex gap-2 mb-1">
+                                            <span className={`h-1 w-8 rounded-full transition-all ${password.length >= 8 ? 'bg-emerald-500' : 'bg-neutral-800'}`} />
+                                            <span className={`h-1 w-8 rounded-full transition-all ${/[A-Z]/.test(password) ? 'bg-emerald-500' : 'bg-neutral-800'}`} />
+                                            <span className={`h-1 w-8 rounded-full transition-all ${/[^A-Za-z0-9]/.test(password) ? 'bg-emerald-500' : 'bg-neutral-800'}`} />
+                                        </div>
+                                    </div>
                                     <div className="relative group">
                                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600 group-focus-within:text-emerald-400 transition-colors" />
-                                        <input type={showPassword ? 'text' : 'password'} required minLength={6} placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)}
-                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-2xl pl-12 pr-12 py-4 text-white outline-none focus:border-emerald-500/50 focus:bg-neutral-900 transition-all placeholder:text-neutral-700 text-sm" />
+                                        <input 
+                                            type={showPassword ? 'text' : 'password'} 
+                                            required 
+                                            placeholder="••••••••" 
+                                            value={password} 
+                                            onChange={e => setPassword(e.target.value)}
+                                            className="w-full bg-neutral-900/50 border border-neutral-800 rounded-2xl pl-12 pr-12 py-4 text-white outline-none focus:border-emerald-500/50 focus:bg-neutral-900 transition-all placeholder:text-neutral-700 text-sm" 
+                                        />
                                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-white transition-colors">
                                             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                         </button>
                                     </div>
+                                    <p className="text-[10px] text-neutral-500 flex flex-wrap gap-x-3 gap-y-1 px-1">
+                                        <span className={password.length >= 8 ? 'text-emerald-400' : ''}>• Min. 8 caracteres</span>
+                                        <span className={/[A-Z]/.test(password) ? 'text-emerald-400' : ''}>• Una mayúscula</span>
+                                        <span className={/[^A-Za-z0-9]/.test(password) ? 'text-emerald-400' : ''}>• Un carácter especial</span>
+                                    </p>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className={`grid ${role === 'cliente' ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Teléfono</label>
                                         <div className="relative group">
                                             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600 group-focus-within:text-emerald-400 transition-colors" />
-                                            <input type="tel" placeholder="+54 11 1234-5678" value={telefono} onChange={e => setTelefono(e.target.value)}
+                                            <input type="tel" placeholder="541112345678" value={telefono} onChange={e => setTelefono(e.target.value.replace(/\D/g, ''))}
                                                 className="w-full bg-neutral-900/50 border border-neutral-800 rounded-2xl pl-12 pr-4 py-4 text-white outline-none focus:border-emerald-500/50 focus:bg-neutral-900 transition-all placeholder:text-neutral-700 text-sm" />
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Ubicación</label>
-                                        <div className="relative group">
-                                            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600 group-focus-within:text-emerald-400 transition-colors" />
-                                            <input type="text" placeholder="Buenos Aires" value={ubicacion} onChange={e => setUbicacion(e.target.value)}
-                                                className="w-full bg-neutral-900/50 border border-neutral-800 rounded-2xl pl-12 pr-4 py-4 text-white outline-none focus:border-emerald-500/50 focus:bg-neutral-900 transition-all placeholder:text-neutral-700 text-sm" />
+                                    {role === 'cliente' && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Ubicación</label>
+                                            <div className="relative group">
+                                                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600 group-focus-within:text-emerald-400 transition-colors" />
+                                                <input type="text" placeholder="Buenos Aires" value={ubicacion} onChange={e => setUbicacion(e.target.value)}
+                                                    className="w-full bg-neutral-900/50 border border-neutral-800 rounded-2xl pl-12 pr-4 py-4 text-white outline-none focus:border-emerald-500/50 focus:bg-neutral-900 transition-all placeholder:text-neutral-700 text-sm" />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             </CollapsibleSection>
 
@@ -555,8 +607,8 @@ export default function LoginPage() {
                             {error && <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="bg-red-500/10 border border-red-500/20 text-red-400 px-5 py-3 rounded-2xl text-sm font-medium">{error}</motion.div>}
                             {success && <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-5 py-3 rounded-2xl text-sm font-medium">{success}</motion.div>}
 
-                            <button type="submit" disabled={loading}
-                                className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-500/20 disabled:opacity-50 active:scale-[0.98]">
+                            <button type="submit" disabled={loading || (mode === 'register' && !isPasswordSecure)}
+                                className="w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-emerald-500/20 disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98]">
                                 {loading
                                     ? <Loader2 className="w-5 h-5 animate-spin" />
                                     : <><ArrowRight className="w-5 h-5" /><span>Crear cuenta como {role === 'cliente' ? 'Cliente' : 'Tatuador'}</span></>

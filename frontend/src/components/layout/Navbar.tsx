@@ -1,18 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { Ghost, Menu, X, LogOut, User, Palette } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { Ghost, Menu, X, LogOut, User, Palette, Search } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
 export function Navbar() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [isOpen, setIsOpen] = useState(false);
     const [user, setUser] = useState<any>(null);
     const [perfil, setPerfil] = useState<any>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
+    const [searchValue, setSearchValue] = useState('');
+
+    // Sync search input with URL params (also handles initial mount)
+    useEffect(() => {
+        setSearchValue(searchParams.get('q') || '');
+    }, [searchParams]);
+
 
     useEffect(() => {
-        // Check initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setUser(session?.user ?? null);
             if (session?.user) {
@@ -22,7 +32,6 @@ export function Navbar() {
             setLoadingAuth(false);
         });
 
-        // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setUser(session?.user ?? null);
             if (session?.user) {
@@ -43,72 +52,142 @@ export function Navbar() {
         window.location.href = '/';
     };
 
+    const handleSearch = useCallback((value: string) => {
+        setSearchValue(value);
+        const params = new URLSearchParams(searchParams.toString());
+        if (value.trim()) {
+            params.set('q', value);
+        } else {
+            params.delete('q');
+        }
+        // Only push to home if we're on the home page, otherwise navigate there
+        if (pathname === '/') {
+            router.replace(`/?${params.toString()}`, { scroll: false });
+        } else {
+            router.push(`/?${params.toString()}`);
+        }
+    }, [searchParams, pathname, router]);
+
+    const handleMisTurnos = () => {
+        if (user) {
+            const dashboardLink = perfil?.rol === 'tatuador' ? '/artist-dashboard' : '/dashboard';
+            router.push(dashboardLink);
+        } else {
+            router.push('/login');
+        }
+    };
+
     const dashboardLink = perfil?.rol === 'tatuador' ? '/artist-dashboard' : '/dashboard';
 
     return (
-        <nav className="fixed top-0 w-full z-50 glass border-b border-border">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-20 items-center">
+        <nav className="fixed top-0 w-full z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800/50">
+            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center h-16 gap-4">
                     {/* Logo */}
-                    <Link href="/" className="flex items-center space-x-2">
-                        <div className="p-2 bg-accent rounded-lg shadow-emerald">
-                            <Ghost className="w-6 h-6 text-black" />
+                    <Link href="/" className="flex items-center space-x-2 shrink-0">
+                        <div className="p-1.5 bg-emerald-500 rounded-lg">
+                            <Ghost className="w-5 h-5 text-white" />
                         </div>
-                        <span className="text-2xl font-bold tracking-tighter">
-                            INK<span className="text-accent">MATCH</span>
+                        <span className="text-xl font-bold tracking-tighter text-white">
+                            Ink<span className="text-emerald-400">Match</span>
                         </span>
                     </Link>
 
-                    {/* Desktop Navigation */}
-                    <div className="hidden md:flex items-center space-x-8">
-                        <Link href="/" className="text-sm font-medium hover:text-accent transition-colors">
+                    {/* Nav Links — Left */}
+                    <div className="hidden md:flex items-center gap-1 shrink-0">
+                        <Link
+                            href="/"
+                            className="px-3 py-2 text-sm font-semibold text-neutral-300 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                        >
                             Explorar
                         </Link>
-                        <Link href="/artists" className="text-sm font-medium hover:text-accent transition-colors">
-                            Tatuadores
-                        </Link>
+                        <a
+                            href="https://www.pinterest.com/search/pins/?q=tattoo%20inspiration"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-2 text-sm font-semibold text-neutral-300 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                        >
+                            Inspiración
+                        </a>
+                        <button
+                            onClick={handleMisTurnos}
+                            className="px-3 py-2 text-sm font-semibold text-neutral-300 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                        >
+                            Mis Turnos
+                        </button>
+                    </div>
 
+                    {/* Search Bar — Center (flex-grow) */}
+                    <div className="hidden md:flex flex-1 max-w-2xl mx-2">
+                        <div className="relative w-full group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500 group-focus-within:text-emerald-400 transition-colors" />
+                            <input
+                                type="text"
+                                placeholder="Busca por nombre de artista o ciudad"
+                                className="w-full bg-white/10 hover:bg-white/15 focus:bg-white/15 border border-neutral-700 focus:border-emerald-500/50 rounded-full pl-10 pr-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-neutral-500 focus:shadow-sm"
+                                value={searchValue}
+                                onChange={(e) => handleSearch(e.target.value)}
+                            />
+                            {searchValue && (
+                                <button
+                                    onClick={() => handleSearch('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/20 transition-colors"
+                                >
+                                    <X className="w-3.5 h-3.5 text-neutral-400" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right Section */}
+                    <div className="hidden md:flex items-center gap-2 shrink-0">
                         {user ? (
                             <>
-                                <Link href={dashboardLink} className="text-sm font-medium hover:text-accent transition-colors">
-                                    {perfil?.rol === 'tatuador' ? 'Mi Dashboard' : 'Mis Turnos'}
+                                <Link
+                                    href={dashboardLink}
+                                    className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 border border-neutral-700 rounded-full transition-colors"
+                                >
+                                    {perfil?.rol === 'tatuador'
+                                        ? <Palette className="w-4 h-4 text-emerald-500" />
+                                        : <User className="w-4 h-4 text-emerald-500" />
+                                    }
+                                    <span className="text-sm font-semibold text-white">
+                                        {perfil?.nombre || user.email?.split('@')[0]}
+                                    </span>
                                 </Link>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-2">
-                                        {perfil?.rol === 'tatuador'
-                                            ? <Palette className="w-4 h-4 text-emerald-400" />
-                                            : <User className="w-4 h-4 text-emerald-400" />
-                                        }
-                                        <span className="text-sm font-medium">{perfil?.nombre || user.email?.split('@')[0]}</span>
-                                    </div>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="p-2.5 bg-white/5 border border-white/10 rounded-full hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-400 transition-all"
-                                        title="Cerrar sesión"
-                                    >
-                                        <LogOut className="w-4 h-4" />
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={handleLogout}
+                                    className="p-2.5 rounded-full hover:bg-white/10 text-neutral-400 hover:text-red-400 transition-all"
+                                    title="Cerrar sesión"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                </button>
                             </>
                         ) : (
                             <>
-                                <Link href="/dashboard" className="text-sm font-medium hover:text-accent transition-colors">
-                                    Mis Turnos
+                                <Link
+                                    href="/login"
+                                    className="px-5 py-2.5 text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-full transition-all shadow-sm hover:shadow-md"
+                                >
+                                    Iniciar sesión
                                 </Link>
-                                <Link href="/login" className="px-5 py-2.5 bg-accent hover:bg-accent-hover text-black font-semibold rounded-full transition-all duration-300 shadow-emerald">
-                                    Entrar
+                                <Link
+                                    href="/login?mode=register"
+                                    className="px-4 py-2.5 text-sm font-semibold text-neutral-300 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+                                >
+                                    Registrarse
                                 </Link>
                             </>
                         )}
                     </div>
 
                     {/* Mobile menu button */}
-                    <div className="md:hidden">
+                    <div className="md:hidden ml-auto">
                         <button
                             onClick={() => setIsOpen(!isOpen)}
-                            className="p-2 rounded-md hover:bg-white/10 transition-colors"
+                            className="p-2 rounded-full hover:bg-white/10 transition-colors"
                         >
-                            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                            {isOpen ? <X className="w-5 h-5 text-neutral-300" /> : <Menu className="w-5 h-5 text-neutral-300" />}
                         </button>
                     </div>
                 </div>
@@ -116,68 +195,83 @@ export function Navbar() {
 
             {/* Mobile Navigation */}
             {isOpen && (
-                <div className="md:hidden glass border-t border-border animate-in slide-in-from-top duration-300">
-                    <div className="px-4 pt-4 pb-6 space-y-2">
+                <div className="md:hidden bg-neutral-950 border-t border-neutral-800 animate-in slide-in-from-top duration-300">
+                    <div className="px-4 pt-3 pb-4 space-y-2">
+                        {/* Mobile Search */}
+                        <div className="relative mb-3">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+                            <input
+                                type="text"
+                                placeholder="Busca por nombre de artista o ciudad"
+                                className="w-full bg-white/10 border border-neutral-700 rounded-full pl-10 pr-4 py-3 text-sm text-white outline-none focus:border-emerald-500/50 placeholder:text-neutral-500"
+                                value={searchValue}
+                                onChange={(e) => handleSearch(e.target.value)}
+                            />
+                        </div>
+
                         <Link
                             href="/"
-                            className="block px-3 py-4 text-base font-medium rounded-xl hover:bg-white/5"
+                            className="block px-4 py-3 text-base font-semibold text-neutral-300 rounded-xl hover:bg-white/10"
                             onClick={() => setIsOpen(false)}
                         >
                             Explorar
                         </Link>
-                        <Link
-                            href="/artists"
-                            className="block px-3 py-4 text-base font-medium rounded-xl hover:bg-white/5"
+                        <a
+                            href="https://www.pinterest.com/search/pins/?q=tattoo%20inspiration"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block px-4 py-3 text-base font-semibold text-neutral-300 rounded-xl hover:bg-white/10"
                             onClick={() => setIsOpen(false)}
                         >
-                            Tatuadores
-                        </Link>
+                            Inspiración
+                        </a>
+                        <button
+                            onClick={() => { handleMisTurnos(); setIsOpen(false); }}
+                            className="block w-full text-left px-4 py-3 text-base font-semibold text-neutral-300 rounded-xl hover:bg-white/10"
+                        >
+                            Mis Turnos
+                        </button>
 
                         {user ? (
-                            <>
+                            <div className="pt-3 space-y-2 border-t border-neutral-800">
                                 <Link
                                     href={dashboardLink}
-                                    className="block px-3 py-4 text-base font-medium rounded-xl hover:bg-white/5"
+                                    className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl"
                                     onClick={() => setIsOpen(false)}
                                 >
-                                    {perfil?.rol === 'tatuador' ? 'Mi Dashboard' : 'Mis Turnos'}
+                                    {perfil?.rol === 'tatuador'
+                                        ? <Palette className="w-4 h-4 text-emerald-500" />
+                                        : <User className="w-4 h-4 text-emerald-500" />
+                                    }
+                                    <span className="text-sm font-semibold text-white">
+                                        {perfil?.nombre || user.email?.split('@')[0]}
+                                    </span>
                                 </Link>
-                                <div className="pt-4 space-y-3">
-                                    <div className="flex items-center gap-3 px-3 py-3 bg-white/5 rounded-xl">
-                                        {perfil?.rol === 'tatuador'
-                                            ? <Palette className="w-4 h-4 text-emerald-400" />
-                                            : <User className="w-4 h-4 text-emerald-400" />
-                                        }
-                                        <span className="text-sm font-medium">{perfil?.nombre || user.email?.split('@')[0]}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => { handleLogout(); setIsOpen(false); }}
-                                        className="w-full py-4 bg-red-500/10 border border-red-500/20 text-red-400 font-bold rounded-xl flex items-center justify-center gap-2"
-                                    >
-                                        <LogOut className="w-4 h-4" />
-                                        Cerrar sesión
-                                    </button>
-                                </div>
-                            </>
+                                <button
+                                    onClick={() => { handleLogout(); setIsOpen(false); }}
+                                    className="w-full py-3 bg-red-500/10 border border-red-500/20 text-red-400 font-bold rounded-xl flex items-center justify-center gap-2"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Cerrar sesión
+                                </button>
+                            </div>
                         ) : (
-                            <>
+                            <div className="pt-3 space-y-2 border-t border-neutral-800">
                                 <Link
-                                    href="/dashboard"
-                                    className="block px-3 py-4 text-base font-medium rounded-xl hover:bg-white/5"
+                                    href="/login"
+                                    className="block w-full py-3 text-center bg-emerald-500 text-black font-bold rounded-full shadow-sm"
                                     onClick={() => setIsOpen(false)}
                                 >
-                                    Mis Turnos
+                                    Iniciar sesión
                                 </Link>
-                                <div className="pt-4">
-                                    <Link
-                                        href="/login"
-                                        className="block w-full py-4 bg-accent text-black font-bold rounded-xl shadow-emerald text-center"
-                                        onClick={() => setIsOpen(false)}
-                                    >
-                                        Entrar
-                                    </Link>
-                                </div>
-                            </>
+                                <Link
+                                    href="/login?mode=register"
+                                    className="block w-full py-3 text-center text-neutral-300 font-semibold border border-neutral-700 rounded-full hover:bg-white/10"
+                                    onClick={() => setIsOpen(false)}
+                                >
+                                    Registrarse
+                                </Link>
+                            </div>
                         )}
                     </div>
                 </div>

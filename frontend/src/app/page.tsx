@@ -1,24 +1,39 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Instagram, ArrowRight, Loader2, Search, Sparkles, X } from 'lucide-react';
+import { ArrowRight, Loader2, Sparkles, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const STYLES = ['Todos', 'Realismo', 'Fine Line', 'Tradicional', 'Blackwork', 'Neo Traditional', 'Acuarela', 'Minimalista'];
 
 export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" size={48} />
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [tatuadores, setTatuadores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeStyle, setActiveStyle] = useState('Todos');
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // Read search query from URL params (set by Navbar)
+  const searchQuery = searchParams.get('q') || '';
 
   useEffect(() => {
     async function fetchTatuadores() {
-      const { data } = await supabase.from('tatuadores').select('*');
+      const { data } = await supabase.from('tatuadores').select('*, perfiles(ubicacion)');
       if (data) setTatuadores(data);
       setLoading(false);
     }
@@ -32,10 +47,17 @@ export default function Home() {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(t =>
-        t.nombre_artistico?.toLowerCase().includes(q) ||
-        t.estilo_principal?.toLowerCase().includes(q)
-      );
+      result = result.filter(t => {
+        // Match the fallback logic in rendering: if no location specified, it defaults to "Buenos Aires"
+        const ubi = t.ubicacion || (t.perfiles as any)?.ubicacion || "Buenos Aires";
+        return (
+          t.nombre_artistico?.toLowerCase().includes(q) ||
+          t.estilo_principal?.toLowerCase().includes(q) ||
+          t.ciudad?.toLowerCase().includes(q) ||
+          ubi.toLowerCase().includes(q) ||
+          t.biografia?.toLowerCase().includes(q)
+        );
+      });
     }
     return result;
   }, [tatuadores, activeStyle, searchQuery]);
@@ -48,19 +70,10 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
-      {/* Hero */}
+      {/* Hero — Clean, text-focused (Freepik inspiration) */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-neutral-950 to-neutral-950" />
         <div className="relative max-w-6xl mx-auto px-6 pt-16 pb-12">
-          <header className="flex justify-between items-center mb-16">
-            <Link href="/" className="text-3xl font-bold text-emerald-400 tracking-tighter">
-              InkMatch
-            </Link>
-            <Link href="/registro-tatuador" className="bg-emerald-500 hover:bg-emerald-400 text-black font-bold px-6 py-3 rounded-full transition-all hover:scale-105">
-              Unirme como Tatuador
-            </Link>
-          </header>
-
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h1 className="text-6xl md:text-7xl font-bold tracking-tighter mb-4">
               Encontrá tu <span className="bg-gradient-to-r from-emerald-400 to-emerald-300 bg-clip-text text-transparent">artista ideal</span>
@@ -68,28 +81,6 @@ export default function Home() {
             <p className="text-neutral-400 text-lg md:text-xl">
               Explorá los mejores tatuadores, descubrí su trabajo y agendá tu turno al instante.
             </p>
-          </div>
-
-          {/* Search Bar */}
-          <div className="max-w-xl mx-auto mb-12">
-            <div className="relative group">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-neutral-500 w-5 h-5 group-focus-within:text-emerald-400 transition-colors" />
-              <input
-                type="text"
-                placeholder="Buscar por nombre de artista..."
-                className="w-full bg-neutral-900/80 backdrop-blur-xl border border-neutral-800 focus:border-emerald-500/50 rounded-2xl pl-14 pr-12 py-5 text-white outline-none transition-all placeholder:text-neutral-600"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
           </div>
 
           {/* Style Filter Pills */}
@@ -117,12 +108,17 @@ export default function Home() {
           <p className="text-neutral-500 text-sm">
             {filtered.length} {filtered.length === 1 ? 'artista' : 'artistas'} encontrados
           </p>
-          {activeStyle !== 'Todos' && (
+          {(activeStyle !== 'Todos' || searchQuery) && (
             <button
-              onClick={() => setActiveStyle('Todos')}
+              onClick={() => {
+                setActiveStyle('Todos');
+                if (searchQuery) {
+                  router.replace('/', { scroll: false });
+                }
+              }}
               className="text-emerald-400 text-sm font-semibold hover:underline"
             >
-              Limpiar filtro
+              Limpiar filtros
             </button>
           )}
         </div>
@@ -147,7 +143,10 @@ export default function Home() {
                 Probá con otro estilo o buscá por nombre para descubrir nuevos tatuadores.
               </p>
               <button
-                onClick={() => { setActiveStyle('Todos'); setSearchQuery(''); }}
+                onClick={() => {
+                  setActiveStyle('Todos');
+                  router.replace('/', { scroll: false });
+                }}
                 className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-2xl transition-all hover:scale-105 shadow-lg shadow-emerald-500/20"
               >
                 Ver todos los artistas
@@ -179,6 +178,7 @@ export default function Home() {
                         <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold text-emerald-400 border border-emerald-500/30">
                           {t.estilo_principal}
                         </div>
+                        {/* Hover-only "Ver Portfolio" button */}
                         <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                           <div className="bg-emerald-500 text-black px-4 py-2 rounded-full text-xs font-bold flex items-center gap-1.5">
                             Ver Portfolio <ArrowRight size={14} />
@@ -186,13 +186,14 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="p-6 space-y-3">
-                        <h2 className="text-xl font-bold group-hover:text-emerald-400 transition-colors">{t.nombre_artistico}</h2>
-                        <p className="text-neutral-500 text-sm line-clamp-2 leading-relaxed">{t.biografia}</p>
-                        <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50">
-                          <span className="text-emerald-400/70 text-xs font-medium flex items-center gap-1">
-                            Ver Portfolio <ArrowRight size={12} />
-                          </span>
+                        <div>
+                          <h2 className="text-xl font-bold group-hover:text-emerald-400 transition-colors">{t.nombre_artistico}</h2>
+                          <div className="flex items-center text-neutral-500 text-xs mt-1">
+                            <MapPin size={12} className="mr-1" />
+                            {t.ubicacion || (t.perfiles as any)?.ubicacion || (t.perfiles as any)?.[0]?.ubicacion || "Buenos Aires"}
+                          </div>
                         </div>
+                        <p className="text-neutral-500 text-sm line-clamp-2 leading-relaxed">{t.biografia}</p>
                       </div>
                     </div>
                   </Link>

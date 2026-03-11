@@ -35,20 +35,49 @@ export default function ArtistDashboard() {
     // Action loading state
     const [actionLoading, setActionLoading] = useState<number | null>(null);
 
-    // Mock constants until Auth is ready
-    const ARTIST_ID = 1;
-    const ARTIST_USER_ID = "0d8b4a60-af40-4ba3-a8e1-7c56d1853fcf"; // Valid UUID from 'perfiles'
+    // Dynamic auth state
+    const [artistId, setArtistId] = useState<number | null>(null);
+    const [artistUserId, setArtistUserId] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchDashboardData();
+        setupUser();
     }, []);
 
-    async function fetchDashboardData() {
+    async function setupUser() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) {
+                window.location.href = '/login';
+                return;
+            }
+            
+            setArtistUserId(session.user.id);
+            
+            const { data: tatuador, error } = await supabase
+                .from('tatuadores')
+                .select('id')
+                .eq('user_id', session.user.id)
+                .single();
+                
+            if (error || !tatuador) throw error;
+            
+            setArtistId(tatuador.id);
+            fetchDashboardData(tatuador.id);
+        } catch (err: any) {
+            console.error("Error fetching artist profile:", err);
+            window.location.href = '/';
+        }
+    }
+
+    async function fetchDashboardData(tId?: number) {
         setLoading(true);
+        const currentArtistId = tId || artistId;
+        if (!currentArtistId) return;
+
         const { data, error } = await supabase
             .from('turnos')
             .select('*, perfiles(id, nombre, apellido)')
-            .eq('tatuador_id', ARTIST_ID)
+            .eq('tatuador_id', currentArtistId)
             .order("created_at", { ascending: false });
 
         if (data) setAppointments(data);
@@ -66,11 +95,13 @@ export default function ArtistDashboard() {
         try {
             await supabase.from('turnos').update({ estado: 'aceptado' }).eq('id', turno.id);
             // Insert auto message
-            await supabase.from('mensajes').insert([{
-                turno_id: turno.id,
-                emisor_id: ARTIST_USER_ID,
-                contenido: "¡Hola! He aceptado tu solicitud de turno. Te escribo para coordinar los detalles restantes."
-            }]);
+            if (artistUserId) {
+                await supabase.from('mensajes').insert([{
+                    turno_id: turno.id,
+                    emisor_id: artistUserId,
+                    contenido: "¡Hola! He aceptado tu solicitud de turno. Te escribo para coordinar los detalles restantes."
+                }]);
+            }
             await fetchDashboardData();
         } catch (e) {
             console.error(e);
@@ -84,11 +115,13 @@ export default function ArtistDashboard() {
         try {
             await supabase.from('turnos').update({ estado: 'consulta' }).eq('id', turno.id);
             // Insert auto message
-            await supabase.from('mensajes').insert([{
-                turno_id: turno.id,
-                emisor_id: ARTIST_USER_ID,
-                contenido: "¡Hola! Analicé tu solicitud pero necesito hacerte algunas preguntas antes de confirmar."
-            }]);
+            if (artistUserId) {
+                await supabase.from('mensajes').insert([{
+                    turno_id: turno.id,
+                    emisor_id: artistUserId,
+                    contenido: "¡Hola! Analicé tu solicitud pero necesito hacerte algunas preguntas antes de confirmar."
+                }]);
+            }
             await fetchDashboardData();
             openChat(turno.id, (turno.perfiles?.nombre || "Cliente"));
         } catch (e) {
@@ -120,10 +153,11 @@ export default function ArtistDashboard() {
         const imagen_url = formData.get("imagen_url") as string;
 
         try {
+            if (!artistId) throw new Error("Artist ID no encontrado");
             const { error } = await supabase
                 .from('portfolio')
                 .insert([{
-                    tatuador_id: ARTIST_ID,
+                    tatuador_id: artistId,
                     titulo,
                     imagen_url: imagen_url || "https://images.unsplash.com/photo-1598371839696-5c5bb00bdc28?q=80&w=800&auto=format&fit=crop"
                 }]);
@@ -182,7 +216,15 @@ export default function ArtistDashboard() {
                             <ImageIcon className="w-5 h-5" />
                             <span>Mi Portfolio</span>
                         </button>
-                        <button className="w-full flex items-center space-x-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all relative">
+                        <button 
+                            onClick={() => {
+                                setActiveTab("overview");
+                                setTimeout(() => {
+                                    document.getElementById('solicitudes-pendientes')?.scrollIntoView({ behavior: 'smooth' })
+                                }, 100);
+                            }}
+                            className="w-full flex items-center space-x-3 px-4 py-3 text-zinc-400 hover:text-white hover:bg-white/5 rounded-xl transition-all relative"
+                        >
                             <MessageSquare className="w-5 h-5" />
                             <span>Solicitudes</span>
                             {pendingAppointments.length > 0 && (
@@ -217,26 +259,65 @@ export default function ArtistDashboard() {
                     {activeAppointments.length > 0 && (
                         <div className="space-y-6">
                             <h2 className="text-xl font-bold">Turnos Activos</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-4">
                                 {activeAppointments.map(req => (
-                                    <div key={req.id} className="glass p-6 rounded-2xl border-white/10 flex flex-col justify-between">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="font-bold">{req.perfiles?.nombre || "Cliente Anónimo"} {req.perfiles?.apellido || ""}</h3>
-                                                <p className="text-xs text-zinc-400 flex items-center mt-1">
-                                                    <Calendar className="w-3 h-3 mr-1" /> {req.fecha_sugerida || "A convenir"}
-                                                </p>
+                                    <div key={req.id} className="glass p-6 rounded-[2rem] border-white/10 transition-all hover:bg-white/5 group">
+                                        <div className="flex flex-col md:flex-row gap-6">
+                                            {/* Body Area Photo */}
+                                            <div className="w-full md:w-32 aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-zinc-800 border border-white/5 relative group">
+                                                <img
+                                                    src={req.zona_cuerpo_url || 'https://via.placeholder.com/300?text=Zona+Cuerpo'}
+                                                    alt="Zona del cuerpo"
+                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                />
+                                                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] font-bold text-zinc-400">ZONA</div>
                                             </div>
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${req.estado === 'aceptado' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
-                                                {req.estado}
-                                            </span>
+
+                                            {/* AI Design Idea Reference */}
+                                            {req.idea_diseno_url && (
+                                                <div className="w-full md:w-32 aspect-square rounded-2xl overflow-hidden flex-shrink-0 bg-zinc-800 border border-emerald-500/30 relative group shadow-emerald-sm">
+                                                    <img
+                                                        src={req.idea_diseno_url}
+                                                        alt="Idea IA"
+                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                    />
+                                                    <div className="absolute top-2 left-2 bg-emerald-500/80 backdrop-blur-md px-2 py-1 rounded text-[10px] font-bold text-black flex items-center gap-1">
+                                                        <Sparkles className="w-2.5 h-2.5" /> IA
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="flex-1 space-y-4">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h3 className="font-bold text-lg">
+                                                            {req.perfiles?.nombre || "Cliente Anónimo"} {req.perfiles?.apellido || ""}
+                                                        </h3>
+                                                        <p className="text-zinc-500 text-sm flex items-center mt-1">
+                                                            <Calendar className="w-3 h-3 mr-1.5" /> {req.fecha_sugerida || "A convenir"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${req.estado === 'aceptado' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
+                                                            {req.estado}
+                                                        </span>
+                                                        <button 
+                                                            onClick={() => openChat(req.id, req.perfiles?.nombre || "Cliente")}
+                                                            className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex justify-center items-center transition-all group-hover:bg-accent group-hover:text-black group-hover:border-accent"
+                                                            title="Ir al chat"
+                                                        >
+                                                            <MessageSquare className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-zinc-900/50 p-4 rounded-xl border border-white/5">
+                                                    <p className="text-zinc-400 text-sm leading-relaxed italic">
+                                                        &quot;{req.comentarios || "Sin descripción de idea"}&quot;
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <button 
-                                            onClick={() => openChat(req.id, req.perfiles?.nombre || "Cliente")}
-                                            className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold flex justify-center items-center gap-2 transition-all"
-                                        >
-                                            <MessageSquare className="w-4 h-4" /> Ir al chat
-                                        </button>
                                     </div>
                                 ))}
                             </div>
@@ -244,7 +325,7 @@ export default function ArtistDashboard() {
                     )}
 
                     {/* Turnos Pendientes */}
-                    <div className="space-y-6">
+                    <div id="solicitudes-pendientes" className="space-y-6">
                         <div className="flex justify-between items-center px-2">
                             <h2 className="text-xl font-bold">Turnos Pendientes</h2>
                         </div>
@@ -341,12 +422,12 @@ export default function ArtistDashboard() {
             </div>
 
             {/* Chat Gatekeeper */}
-            {activeTurnoId && (
+            {activeTurnoId && artistUserId && (
                 <TurnoChat
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}
                     turnoId={activeTurnoId}
-                    currentUserId={ARTIST_USER_ID} // Emisor
+                    currentUserId={artistUserId} // Emisor
                     otherPartyName={chatClientName}
                 />
             )}

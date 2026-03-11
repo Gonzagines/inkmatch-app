@@ -45,7 +45,10 @@ export function TurnoChat({ isOpen, onClose, turnoId, currentUserId, otherPartyN
                 "postgres_changes",
                 { event: "INSERT", schema: "public", table: "mensajes", filter: `turno_id=eq.${turnoId}` },
                 (payload) => {
-                    setMessages((prev) => [...prev, payload.new]);
+                    setMessages((prev) => {
+                        const exists = prev.some(m => m.id === payload.new.id || (m.tempId && m.tempId === payload.new.tempId));
+                        return exists ? prev : [...prev, payload.new];
+                    });
                     scrollToBottom();
                 }
             )
@@ -69,17 +72,35 @@ export function TurnoChat({ isOpen, onClose, turnoId, currentUserId, otherPartyN
         const content = newMessage.trim();
         setNewMessage("");
 
-        const { error } = await supabase.from("mensajes").insert([
+        const tempId = `temp-${Date.now()}`;
+        const tempMessage = {
+            id: tempId,
+            tempId: tempId,
+            turno_id: turnoId,
+            emisor_id: currentUserId,
+            contenido: content,
+            created_at: new Date().toISOString()
+        };
+        
+        setMessages(prev => [...prev, tempMessage]);
+        scrollToBottom();
+
+        const { data, error } = await supabase.from("mensajes").insert([
             {
                 turno_id: turnoId,
                 emisor_id: currentUserId,
-                contenido: content
+                contenido: content,
+                // If there's no tempId column in the DB, Supabase will ignore it or throw error?
+                // Wait! We can't insert a column that doesn't exist.
             }
-        ]);
+        ]).select().single();
 
         if (error) {
             console.error("Error sending message:", error);
+            setMessages(prev => prev.filter(m => m.id !== tempId));
             alert("No se pudo enviar el mensaje.");
+        } else if (data) {
+            setMessages(prev => prev.map(m => m.id === tempId ? data : m));
         }
     };
 

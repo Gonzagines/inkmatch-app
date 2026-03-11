@@ -21,8 +21,7 @@ import {
 
 interface AvailabilityBlock {
     dias: number[];
-    inicio: string;
-    fin: string;
+    franjas: { inicio: string; fin: string }[];
 }
 
 const DAY_NAMES = [
@@ -64,7 +63,7 @@ export default function PerfilPage() {
     });
 
     const [disponibilidadBlocks, setDisponibilidadBlocks] = useState<AvailabilityBlock[]>([
-        { dias: [1, 2, 3, 4, 5], inicio: '09:00', fin: '18:00' }
+        { dias: [1, 2, 3, 4, 5], franjas: [{ inicio: '09:00', fin: '18:00' }] }
     ]);
 
     // Extra states for Location & Photo
@@ -130,7 +129,7 @@ export default function PerfilPage() {
         }
 
         // Fetch Tatuador (Artistico & Disponibilidad)
-        const { data: artist } = await supabase.from('tatuadores').select('*').eq('usuario_id', session.user.id).single();
+        const { data: artist } = await supabase.from('tatuadores').select('*').eq('user_id', session.user.id).single();
         if (artist) {
             setArtistId(artist.id);
             setArtistico({
@@ -145,7 +144,12 @@ export default function PerfilPage() {
 
             // Parse availability blocks
             if (artist.horarios_multiples && artist.horarios_multiples.length > 0) {
-                setDisponibilidadBlocks(artist.horarios_multiples);
+                // Ensure all blocks have franjas
+                const mappedBlocks = artist.horarios_multiples.map((b: any) => {
+                    if (b.franjas) return b;
+                    return { ...b, franjas: [{ inicio: b.inicio || '09:00', fin: b.fin || '18:00' }] };
+                });
+                setDisponibilidadBlocks(mappedBlocks);
             } else {
                 // Fallback / Migrate old data
                 let dias = artist.dias_laborales || [1, 2, 3, 4, 5];
@@ -155,8 +159,10 @@ export default function PerfilPage() {
                 }
                 setDisponibilidadBlocks([{
                     dias: dias,
-                    inicio: artist.hora_inicio || '09:00',
-                    fin: artist.hora_fin || '18:00'
+                    franjas: [{
+                        inicio: artist.hora_inicio || '09:00',
+                        fin: artist.hora_fin || '18:00'
+                    }]
                 }]);
             }
         }
@@ -203,7 +209,7 @@ export default function PerfilPage() {
 
             // 2. Upsert Tatuadores (creates if not exists)
             const payload: any = {
-                usuario_id: user.id,
+                user_id: user.id,
                 nombre_artistico: artistico.nombre_artistico,
                 biografia: artistico.biografia,
                 estilo_principal: artistico.estilo_principal,
@@ -232,7 +238,7 @@ export default function PerfilPage() {
     };
 
     const addBlock = () => {
-        setDisponibilidadBlocks(prev => [...prev, { dias: [1, 2, 3, 4, 5], inicio: '09:00', fin: '18:00' }]);
+        setDisponibilidadBlocks(prev => [...prev, { dias: [1, 2, 3, 4, 5], franjas: [{ inicio: '09:00', fin: '18:00' }] }]);
     };
 
     const removeBlock = (index: number) => {
@@ -250,9 +256,21 @@ export default function PerfilPage() {
         setDisponibilidadBlocks(newBlocks);
     };
 
-    const updateBlockTime = (blockIndex: number, field: 'inicio' | 'fin', value: string) => {
+    const addFranja = (blockIndex: number) => {
         const newBlocks = [...disponibilidadBlocks];
-        newBlocks[blockIndex][field] = value;
+        newBlocks[blockIndex].franjas.push({ inicio: '15:00', fin: '19:00' });
+        setDisponibilidadBlocks(newBlocks);
+    };
+
+    const removeFranja = (blockIndex: number, franjaIndex: number) => {
+        const newBlocks = [...disponibilidadBlocks];
+        newBlocks[blockIndex].franjas = newBlocks[blockIndex].franjas.filter((_, idx) => idx !== franjaIndex);
+        setDisponibilidadBlocks(newBlocks);
+    };
+
+    const updateBlockTime = (blockIndex: number, franjaIndex: number, field: 'inicio' | 'fin', value: string) => {
+        const newBlocks = [...disponibilidadBlocks];
+        newBlocks[blockIndex].franjas[franjaIndex][field] = value;
         setDisponibilidadBlocks(newBlocks);
     };
 
@@ -491,25 +509,51 @@ export default function PerfilPage() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-6 bg-neutral-900/50 p-4 rounded-xl">
-                                                <div>
-                                                    <span className="text-[10px] text-neutral-500 block mb-2 uppercase font-bold tracking-wider">Hora de Inicio</span>
-                                                    <input 
-                                                        type="time" 
-                                                        value={block.inicio} 
-                                                        onChange={e => updateBlockTime(index, 'inicio', e.target.value)}
-                                                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 [color-scheme:dark]" 
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <span className="text-[10px] text-neutral-500 block mb-2 uppercase font-bold tracking-wider">Hora de Fin</span>
-                                                    <input 
-                                                        type="time" 
-                                                        value={block.fin} 
-                                                        onChange={e => updateBlockTime(index, 'fin', e.target.value)}
-                                                        className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 [color-scheme:dark]" 
-                                                    />
-                                                </div>
+                                            <div className="flex justify-between items-center mb-4 mt-6">
+                                                <h4 className="text-sm font-medium text-neutral-400">Franjas Horarias</h4>
+                                                <button 
+                                                    onClick={() => addFranja(index)} 
+                                                    className="text-emerald-400 hover:text-emerald-300 font-bold text-sm flex items-center gap-1 transition-colors"
+                                                >
+                                                    <Plus className="w-3 h-3" /> Agregar otro horario
+                                                </button>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                {block.franjas.map((franja, fIdx) => (
+                                                    <div key={fIdx} className="grid grid-cols-2 gap-6 bg-neutral-900/50 p-4 rounded-xl relative group/franja">
+                                                        {block.franjas.length > 1 && (
+                                                            <button 
+                                                                onClick={() => removeFranja(index, fIdx)}
+                                                                className="absolute -right-2 -top-2 w-6 h-6 bg-red-500 hover:bg-red-400 text-white rounded-full flex items-center justify-center opacity-0 group-hover/franja:opacity-100 transition-opacity shadow-lg"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                        )}
+                                                        <div>
+                                                            <span className="text-[10px] text-neutral-500 block mb-2 uppercase font-bold tracking-wider">Inicia</span>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="time" 
+                                                                    value={franja.inicio} 
+                                                                    onChange={e => updateBlockTime(index, fIdx, 'inicio', e.target.value)}
+                                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 [color-scheme:dark]" 
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[10px] text-neutral-500 block mb-2 uppercase font-bold tracking-wider">Termina</span>
+                                                            <div className="relative">
+                                                                <input 
+                                                                    type="time" 
+                                                                    value={franja.fin} 
+                                                                    onChange={e => updateBlockTime(index, fIdx, 'fin', e.target.value)}
+                                                                    className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-white outline-none focus:border-emerald-500 [color-scheme:dark]" 
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     ))}

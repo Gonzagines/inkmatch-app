@@ -29,7 +29,7 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
     const [loading, setLoading] = useState(false);
     
     // Step 1: Availability
-    const [availabilityBlocks, setAvailabilityBlocks] = useState<{ dias: number[], inicio: string, fin: string }[] | null>(null);
+    const [availabilityBlocks, setAvailabilityBlocks] = useState<{ dias: number[], franjas?: { inicio: string, fin: string }[], inicio?: string, fin?: string }[] | null>(null);
     const [selectedDate, setSelectedDate] = useState("");
     const [artistWorkingDay, setArtistWorkingDay] = useState(true);
     const [selectedShift, setSelectedShift] = useState<'Mañana' | 'Tarde' | null>(null);
@@ -65,8 +65,10 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
                     }
                     blocks = [{
                         dias: workingDays,
-                        inicio: data?.hora_inicio || '09:00',
-                        fin: data?.hora_fin || '18:00'
+                        franjas: [{
+                            inicio: data?.hora_inicio || '09:00',
+                            fin: data?.hora_fin || '18:00'
+                        }]
                     }];
                 }
                 setAvailabilityBlocks(blocks);
@@ -93,8 +95,11 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
             let canAfternoon = false;
             
             validBlocks.forEach(b => {
-                if (b.inicio <= '14:00' && b.fin >= '10:00') canMorning = true;
-                if (b.inicio <= '19:00' && b.fin >= '15:00') canAfternoon = true;
+                const franjas = b.franjas || [{ inicio: b.inicio, fin: b.fin }];
+                franjas.forEach((f: any) => {
+                    if (f.inicio <= '14:00' && f.fin >= '10:00') canMorning = true;
+                    if (f.inicio <= '19:00' && f.fin >= '15:00') canAfternoon = true;
+                });
             });
 
             setAvailableShifts({ morning: canMorning, afternoon: canAfternoon });

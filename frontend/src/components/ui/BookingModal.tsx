@@ -29,10 +29,11 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
     const [loading, setLoading] = useState(false);
     
     // Step 1: Availability
-    const [availability, setAvailability] = useState<{ dias: (string | number)[], inicio: string, fin: string } | null>(null);
+    const [availabilityBlocks, setAvailabilityBlocks] = useState<{ dias: number[], inicio: string, fin: string }[] | null>(null);
     const [selectedDate, setSelectedDate] = useState("");
     const [artistWorkingDay, setArtistWorkingDay] = useState(true);
     const [selectedShift, setSelectedShift] = useState<'Mañana' | 'Tarde' | null>(null);
+    const [availableShifts, setAvailableShifts] = useState({ morning: true, afternoon: true });
     
     // Step 2: Uploads and Idea
     const [bodyPhotoUrl, setBodyPhotoUrl] = useState<string>("");
@@ -53,40 +54,53 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
     useEffect(() => {
         if (isOpen && artistId) {
             const fetchAvail = async () => {
-                const { data } = await supabase.from('tatuadores').select('dias_laborales, hora_inicio, hora_fin').eq('id', artistId).single();
+                const { data } = await supabase.from('tatuadores').select('dias_laborales, hora_inicio, hora_fin, horarios_multiples').eq('id', artistId).single();
                 
-                // Fallback logical: if no data, use default [1-5] (Mon-Fri)
-                let workingDays = data?.dias_laborales || [1, 2, 3, 4, 5];
-                
-                // Support both list of names and list of numbers
-                if (typeof workingDays[0] === 'string') {
-                    const map: any = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 };
-                    workingDays = workingDays.map((d: string) => map[d] ?? 1);
+                let blocks = data?.horarios_multiples;
+                if (!blocks || blocks.length === 0) {
+                    let workingDays = data?.dias_laborales || [1, 2, 3, 4, 5];
+                    if (typeof workingDays[0] === 'string') {
+                        const map: any = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 };
+                        workingDays = workingDays.map((d: string) => map[d] ?? 1);
+                    }
+                    blocks = [{
+                        dias: workingDays,
+                        inicio: data?.hora_inicio || '09:00',
+                        fin: data?.hora_fin || '18:00'
+                    }];
                 }
-
-                setAvailability({ 
-                    dias: workingDays, 
-                    inicio: data?.hora_inicio || '09:00', 
-                    fin: data?.hora_fin || '18:00' 
-                });
+                setAvailabilityBlocks(blocks);
             };
             fetchAvail();
         } else {
             setStep(1); setSelectedDate(""); setSelectedShift(null);
             setBodyPhotoUrl(""); setDesignPhotoUrl(""); setDesignIdea("");
             setAiPrompt(""); setGeneratedImageUrl(""); setArtistWorkingDay(true);
+            setAvailableShifts({ morning: true, afternoon: true });
         }
     }, [isOpen, artistId]);
 
     // Handle Date Change Logic
     useEffect(() => {
-        if (selectedDate && availability) {
+        if (selectedDate && availabilityBlocks) {
             const dateObj = new Date(selectedDate + "T00:00:00");
             const dayIndex = dateObj.getDay(); 
-            setArtistWorkingDay(availability.dias.includes(dayIndex));
+            
+            const validBlocks = availabilityBlocks.filter(b => b.dias.includes(dayIndex));
+            setArtistWorkingDay(validBlocks.length > 0);
+            
+            let canMorning = false;
+            let canAfternoon = false;
+            
+            validBlocks.forEach(b => {
+                if (b.inicio <= '14:00' && b.fin >= '10:00') canMorning = true;
+                if (b.inicio <= '19:00' && b.fin >= '15:00') canAfternoon = true;
+            });
+
+            setAvailableShifts({ morning: canMorning, afternoon: canAfternoon });
             setSelectedShift(null);
         }
-    }, [selectedDate, availability]);
+    }, [selectedDate, availabilityBlocks]);
 
     const nextStep = () => setStep(step + 1);
     const prevStep = () => setStep(step - 1);
@@ -225,25 +239,25 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
                             <div className="grid grid-cols-2 gap-4">
                                 <button 
                                     onClick={() => setSelectedShift('Mañana')}
-                                    disabled={!selectedDate || !artistWorkingDay}
+                                    disabled={!selectedDate || !artistWorkingDay || !availableShifts.morning}
                                     className={`p-4 rounded-xl font-bold transition-all ${
                                         selectedShift === 'Mañana' 
                                             ? 'bg-accent text-black shadow-emerald' 
                                             : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:border-white/20'
                                     } disabled:opacity-30 disabled:cursor-not-allowed`}
                                 >
-                                    Mañana (10:00 - 14:00)
+                                    Mañana (10:00 - 14:00) {!availableShifts.morning && artistWorkingDay && <span className="block text-[10px] text-red-400 mt-1">Fuera de horario</span>}
                                 </button>
                                 <button 
                                     onClick={() => setSelectedShift('Tarde')}
-                                    disabled={!selectedDate || !artistWorkingDay}
+                                    disabled={!selectedDate || !artistWorkingDay || !availableShifts.afternoon}
                                     className={`p-4 rounded-xl font-bold transition-all ${
                                         selectedShift === 'Tarde' 
                                             ? 'bg-accent text-black shadow-emerald' 
                                             : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:border-white/20'
                                     } disabled:opacity-30 disabled:cursor-not-allowed`}
                                 >
-                                    Tarde (15:00 - 19:00)
+                                    Tarde (15:00 - 19:00) {!availableShifts.afternoon && artistWorkingDay && <span className="block text-[10px] text-red-400 mt-1">Fuera de horario</span>}
                                 </button>
                             </div>
                         </div>

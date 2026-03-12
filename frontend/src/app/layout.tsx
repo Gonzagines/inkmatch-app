@@ -1,4 +1,3 @@
-```
 import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import { Suspense } from "react";
@@ -34,4 +33,3 @@ export default function RootLayout({
     </html>
   );
 }
-```

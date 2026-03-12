@@ -54,21 +54,17 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
     useEffect(() => {
         if (isOpen && artistId) {
             const fetchAvail = async () => {
-                const { data } = await supabase.from('tatuadores').select('dias_laborales, hora_inicio, hora_fin, horarios_multiples').eq('id', artistId).single();
+                const { data, error } = await supabase.from('tatuadores').select('horarios_multiples').eq('id', artistId).single();
                 
+                if (error) {
+                    console.error("Error fetching availability:", error);
+                }
+
                 let blocks = data?.horarios_multiples;
                 if (!blocks || blocks.length === 0) {
-                    let workingDays = data?.dias_laborales || [1, 2, 3, 4, 5];
-                    if (typeof workingDays[0] === 'string') {
-                        const map: any = { 'Domingo': 0, 'Lunes': 1, 'Martes': 2, 'Miércoles': 3, 'Jueves': 4, 'Viernes': 5, 'Sábado': 6 };
-                        workingDays = workingDays.map((d: string) => map[d] ?? 1);
-                    }
                     blocks = [{
-                        dias: workingDays,
-                        franjas: [{
-                            inicio: data?.hora_inicio || '09:00',
-                            fin: data?.hora_fin || '18:00'
-                        }]
+                        dias: [1, 2, 3, 4, 5],
+                        franjas: [{ inicio: '09:00', fin: '18:00' }]
                     }];
                 }
                 setAvailabilityBlocks(blocks);

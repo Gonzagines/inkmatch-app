@@ -21,14 +21,14 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark scroll-smooth" suppressHydrationWarning>
       <body className={`${inter.className} ${outfit.variable} min-h-screen bg-background text-foreground antialiased`} suppressHydrationWarning>
-        <Suspense>
-          <Navbar />
-        </Suspense>
-        <main>
-          <NotificationProvider>
+        <NotificationProvider>
+          <Suspense>
+            <Navbar />
+          </Suspense>
+          <main>
             {children}
-          </NotificationProvider>
-        </main>
+          </main>
+        </NotificationProvider>
       </body>
     </html>
   );

@@ -1,13 +1,58 @@
 ---
 name: Git Workflow
-description: Apply Git best practices automatically during development — staging, committing, and pushing with Conventional Commits.
+description: Apply Git best practices automatically during development — branching, staging, committing, and pushing with Conventional Commits. (Version 2.0)
 ---
 
 # Git Workflow
 
 ## Purpose
 
-Maintain a clean, professional Git history by committing and pushing changes at the right moments using Conventional Commits conventions.
+Maintain a clean, professional Git history by creating feature branches, committing and pushing changes at the right moments using Conventional Commits conventions, and safely merging to main.
+
+## Regla de Oro (Golden Rule)
+
+**NUNCA** hagas un commit directo en `main` si el cambio implica más de una línea de texto o configuración básica. Las funcionalidades nuevas SIEMPRE van por rama separada.
+
+## Branching Management
+
+### 1. Creación de Ramas por Feature
+
+Antes de empezar cualquier cambio (feat, fix, refactor), debés crear una rama nueva partiendo de `main` con el comando:
+
+```bash
+git checkout -b nombre-de-la-rama
+```
+
+El nombre debe ser descriptivo, por ejemplo: `feat/sistema-notificaciones` o `fix/error-login`.
+
+### 2. Ciclo de Trabajo
+
+Trabajá y hacé los commits (siguiendo Conventional Commits) dentro de esa rama.
+
+Al finalizar y verificar que el código NO está roto, hacé el push de la rama:
+
+```bash
+git push origin nombre-de-la-rama
+```
+
+### 3. Proceso de Merge (Integración)
+
+Una vez que la feature esté terminada en el remoto y validada, el proceso para integrarla a `main` es el siguiente:
+
+```bash
+git checkout main
+git pull origin main
+git merge nombre-de-la-rama
+git push origin main
+```
+
+### 4. Limpieza
+
+Después del merge exitoso, eliminá la rama local para mantener el repositorio limpio:
+
+```bash
+git branch -d nombre-de-la-rama
+```
 
 ## When to Commit
 
@@ -106,10 +151,10 @@ asdfasdf              ← obviously bad
 ### 5. Push to remote
 
 ```bash
-git push origin main
+git push origin nombre-de-la-rama
 ```
 
-Push after every 1–3 related commits, or at the end of a work session. Always push before ending a conversation.
+Push after every 1–3 related commits, o at the end of a work session. Always push before ending a conversation.
 
 ## Commit Granularity Guidelines
 
@@ -129,18 +174,28 @@ Before every `git add`, verify:
 ## Example Session
 
 ```bash
+# Start new feature
+git checkout main
+git pull origin main
+git checkout -b feat/password-validation
+
 # After implementing password validation
 git status
 git diff --stat
 git add src/app/login/page.tsx
 git commit -m "feat: add password strength validation with visual indicators"
 
-# After fixing a hydration error
-git add src/app/layout.tsx
-git commit -m "fix: resolve hydration mismatch with suppressHydrationWarning"
+# Push branch
+git push origin feat/password-validation
 
-# Push both commits
+# Merge to main
+git checkout main
+git pull origin main
+git merge feat/password-validation
 git push origin main
+
+# Cleanup
+git branch -d feat/password-validation
 ```
 
 ## Automatic Trigger
@@ -152,4 +207,4 @@ The agent should apply this skill automatically when:
 3. Multiple related changes have been made without a commit
 4. A conversation is about to end
 
-The agent should proactively suggest committing when significant work is done, rather than waiting to be asked.
+The agent should proactively suggest branching and committing when significant work is done, rather than waiting to be asked.

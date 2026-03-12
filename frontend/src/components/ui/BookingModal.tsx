@@ -103,7 +103,26 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
                     const i = formatTime(f.inicio);
                     const e = formatTime(f.fin);
                     
-                    const label = i < '14:00' ? 'Mañana' : 'Tarde';
+                    const getMinutes = (timeStr: string) => {
+                        const [h, m] = timeStr.split(':').map(Number);
+                        return h * 60 + m;
+                    };
+
+                    const startMins = getMinutes(i);
+                    const endMins = getMinutes(e);
+                    const durationMins = endMins - startMins;
+                    
+                    let label = "";
+                    if (durationMins >= 5 * 60) {
+                        label = "Jornada Completa";
+                    } else if (i < '12:00' && e <= '14:00') {
+                        label = "Mañana";
+                    } else if (i >= '19:00') {
+                        label = "Noche";
+                    } else {
+                        label = "Tarde";
+                    }
+                    
                     franjasDelDia.push({ label, inicio: i, fin: e });
                 });
             });
@@ -177,7 +196,9 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
         setLoading(true);
 
         try {
-            const CLIENT_ID = 'e5d8a4e2-29f2-4f00-9b5a-63af08ed1906'; // Mocked Cliente (Gonzalo Ginestar)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Debes iniciar sesión para agendar un turno");
+            const CLIENT_ID = session.user.id;
             const finalIdeaUrl = generatedImageUrl || designPhotoUrl;
             
             const { error } = await supabase
@@ -186,7 +207,8 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
                     {
                         tatuador_id: artistId,
                         cliente_id: CLIENT_ID,
-                        fecha_sugerida: `${selectedDate} (${selectedShift})`,
+                        fecha_sugerida: selectedDate, // Solo la fecha (formato DATE válido en Postgres)
+                        franja_horaria: selectedShift, // El texto como "Jornada Completa (09:00 - 18:00)"
                         zona_cuerpo_url: bodyPhotoUrl || null,
                         comentarios: designIdea,
                         idea_diseno_url: finalIdeaUrl || null,

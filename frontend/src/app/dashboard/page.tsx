@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { Calendar, Clock, Sparkles, Settings, LogOut, MessageSquare, Loader2, MapPin, Lock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { TurnoChat } from "@/components/ui/TurnoChat";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 const CLIENT_ID = 'e5d8a4e2-29f2-4f00-9b5a-63af08ed1906'; // Mocked Cliente (Gonzalo Ginestar)
 
 export default function ClientDashboard() {
     const [turnos, setTurnos] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const { notifications } = useNotifications();
 
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [activeTurnoId, setActiveTurnoId] = useState<number | null>(null);
@@ -103,23 +105,39 @@ export default function ClientDashboard() {
                                             <div className="italic text-xs">&quot;{apt.comentarios}&quot;</div>
                                         </div>
                                     </div>
-                                    <div className="flex flex-col items-center md:items-end gap-3 w-full md:w-auto">
-                                        <span className={`px-4 py-1.5 border rounded-full text-xs font-bold uppercase tracking-wider ${getStatusStyles(apt.estado)}`}>
+                                    <div className="flex flex-col items-center md:items-end w-full md:w-auto">
+                                        <span 
+                                            className={`px-4 py-1.5 border rounded-full text-xs font-bold uppercase tracking-wider ${getStatusStyles(apt.estado)}`}
+                                            title={apt.estado === 'rechazado' && apt.motivo_rechazo ? `Motivo: ${apt.motivo_rechazo}` : undefined}
+                                        >
                                             {getStatusText(apt.estado)}
                                         </span>
-                                        
+                                        {apt.estado === 'rechazado' && apt.motivo_rechazo && (
+                                            <p className="text-[10px] text-red-400/80 mt-1.5 mb-2 max-w-[180px] text-center md:text-right italic leading-tight">
+                                                "{apt.motivo_rechazo}"
+                                            </p>
+                                        )}
+                                        <div className={`mt-3 w-full ${apt.estado === 'rechazado' && apt.motivo_rechazo ? '' : 'mt-0'}`}>
                                         <button 
                                             onClick={() => openChat(apt.id, artistInfo.nombre_artistico)}
                                             disabled={!isChatEnabled}
-                                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all w-full justify-center ${
+                                            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all w-full justify-center relative ${
                                                 isChatEnabled 
                                                 ? "bg-white/10 text-white hover:bg-white/20 border border-white/20" 
                                                 : "bg-zinc-900 text-zinc-600 cursor-not-allowed border border-white/5"
                                             }`}
                                         >
-                                            {isChatEnabled ? <MessageSquare className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                                            {isChatEnabled ? (
+                                                <div className="relative">
+                                                    <MessageSquare className="w-4 h-4" />
+                                                    {notifications.filter(n => !n.leido && n.tipo === 'mensaje' && n.referencia_id === apt.id).length > 0 && (
+                                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                                                    )}
+                                                </div>
+                                            ) : <Lock className="w-4 h-4" />}
                                             <span>Ir al Chat</span>
                                         </button>
+                                        </div>
                                     </div>
                                 </div>
                             );

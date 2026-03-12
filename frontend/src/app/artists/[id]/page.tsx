@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
     Star,
     MapPin,
@@ -35,6 +35,7 @@ export default function ArtistProfile() {
     const [activeTab, setActiveTab] = useState("portfolio");
     const [isBookingOpen, setIsBookingOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+    const router = useRouter();
 
     // Review form state
     const [reviewName, setReviewName] = useState("");
@@ -257,7 +258,14 @@ export default function ArtistProfile() {
 
                             <div className="flex gap-3">
                                 <button
-                                    onClick={() => setIsBookingOpen(true)}
+                                    onClick={async () => {
+                                        const { data: { session } } = await supabase.auth.getSession();
+                                        if (!session) {
+                                            router.push('/login');
+                                            return;
+                                        }
+                                        setIsBookingOpen(true);
+                                    }}
                                     className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-2xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center space-x-2 hover:scale-[1.02]"
                                 >
                                     <Calendar className="w-5 h-5" />

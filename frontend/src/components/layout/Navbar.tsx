@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Ghost, Menu, X, LogOut, User, Palette, Search } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { Ghost, Menu, X, LogOut, User, Palette, Search, Bell } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { NotificationPanel } from "@/components/ui/NotificationPanel";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 export function Navbar() {
     const router = useRouter();
@@ -15,6 +17,23 @@ export function Navbar() {
     const [perfil, setPerfil] = useState<any>(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
     const [searchValue, setSearchValue] = useState('');
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const navRef = useRef<HTMLDivElement>(null);
+    let unreadCount = 0;
+    try {
+        const notifCtx = useNotifications();
+        unreadCount = notifCtx.unreadCount;
+    } catch(e) {}
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (navRef.current && !navRef.current.contains(event.target as Node)) {
+                setIsNotificationsOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     // Sync search input with URL params (also handles initial mount)
     useEffect(() => {
@@ -80,7 +99,7 @@ export function Navbar() {
     const dashboardLink = perfil?.rol === 'tatuador' ? '/artist-dashboard' : '/dashboard';
 
     return (
-        <nav className="fixed top-0 w-full z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800/50">
+        <nav className="fixed top-0 w-full z-50 bg-neutral-950/90 backdrop-blur-xl border-b border-neutral-800/50" ref={navRef}>
             <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center h-16 gap-4">
                     {/* Logo */}
@@ -143,6 +162,24 @@ export function Navbar() {
                     <div className="hidden md:flex items-center gap-2 shrink-0">
                         {user ? (
                             <>
+                                {/* Notifications Toggle */}
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                                        className="relative p-2.5 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-all mr-2"
+                                        title="Notificaciones"
+                                    >
+                                        <Bell className="w-5 h-5" />
+                                        {unreadCount > 0 && (
+                                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-neutral-950" />
+                                        )}
+                                    </button>
+                                    
+                                    {isNotificationsOpen && (
+                                        <NotificationPanel onClose={() => setIsNotificationsOpen(false)} />
+                                    )}
+                                </div>
+
                                 <Link
                                     href="/perfil"
                                     className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/15 border border-neutral-700 rounded-full transition-colors"
@@ -181,8 +218,26 @@ export function Navbar() {
                         )}
                     </div>
 
-                    {/* Mobile menu button */}
-                    <div className="md:hidden ml-auto">
+                    {/* Mobile section: Bell + Hamburger */}
+                    <div className="md:hidden ml-auto flex items-center gap-2">
+                        {user && (
+                            <div className="relative">
+                                <button
+                                    onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                                    className="relative p-2 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-all"
+                                >
+                                    <Bell className="w-5 h-5" />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-neutral-950" />
+                                    )}
+                                </button>
+                                {isNotificationsOpen && (
+                                    <div className="absolute right-0 top-12">
+                                        <NotificationPanel onClose={() => setIsNotificationsOpen(false)} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <button
                             onClick={() => setIsOpen(!isOpen)}
                             className="p-2 rounded-full hover:bg-white/10 transition-colors"

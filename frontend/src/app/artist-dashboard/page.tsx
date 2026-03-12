@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { TurnoChat } from "@/components/ui/TurnoChat";
+import { RejectionModal } from "@/components/ui/RejectionModal";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 export default function ArtistDashboard() {
     const [activeTab, setActiveTab] = useState("overview");
@@ -26,6 +28,7 @@ export default function ArtistDashboard() {
     const [loading, setLoading] = useState(true);
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const { notifications } = useNotifications();
     
     // Chat state
     const [isChatOpen, setIsChatOpen] = useState(false);
@@ -34,6 +37,10 @@ export default function ArtistDashboard() {
 
     // Action loading state
     const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+    // Rejection Modal State
+    const [rejectionTurnoId, setRejectionTurnoId] = useState<number | null>(null);
+    const [rejectionClientName, setRejectionClientName] = useState("");
 
     // Dynamic auth state
     const [artistId, setArtistId] = useState<number | null>(null);
@@ -131,11 +138,29 @@ export default function ArtistDashboard() {
         }
     };
 
-    const handleReject = async (turno: any) => {
-        if (!confirm("¿Seguro que deseas rechazar este turno?")) return;
-        setActionLoading(turno.id);
+    const handleReject = (turno: any) => {
+        setRejectionTurnoId(turno.id);
+        const name = (turno.perfiles?.nombre || "Cliente") + " " + (turno.perfiles?.apellido || "");
+        setRejectionClientName(name.trim());
+    };
+
+    const submitReject = async (turnoId: number, reason: string) => {
+        setActionLoading(turnoId);
         try {
-            await supabase.from('turnos').update({ estado: 'rechazado' }).eq('id', turno.id);
+            await supabase.from('turnos').update({ 
+                estado: 'rechazado',
+                motivo_rechazo: reason
+            }).eq('id', turnoId);
+            
+            // Auto message explaining the rejection, which will trigger notification
+            if (artistUserId) {
+                await supabase.from('mensajes').insert([{
+                    turno_id: turnoId,
+                    emisor_id: artistUserId,
+                    contenido: reason
+                }]);
+            }
+
             await fetchDashboardData();
         } catch (e) {
             console.error(e);
@@ -303,10 +328,13 @@ export default function ArtistDashboard() {
                                                         </span>
                                                         <button 
                                                             onClick={() => openChat(req.id, req.perfiles?.nombre || "Cliente")}
-                                                            className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex justify-center items-center transition-all group-hover:bg-accent group-hover:text-black group-hover:border-accent"
+                                                            className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex justify-center items-center transition-all group-hover:bg-accent group-hover:text-black group-hover:border-accent relative"
                                                             title="Ir al chat"
                                                         >
                                                             <MessageSquare className="w-5 h-5" />
+                                                            {notifications.filter(n => !n.leido && n.tipo === 'mensaje' && n.referencia_id === req.id).length > 0 && (
+                                                                <span className="absolute top-1 right-1 w-2.5 h-2.5 border-2 border-zinc-900 bg-red-500 rounded-full" />
+                                                            )}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -444,10 +472,31 @@ export default function ArtistDashboard() {
                             </button>
                         </div>
                         <form onSubmit={handleUploadToPortfolio} className="p-8 space-y-6">
-                            ...
+                            {/* Inputs resumidos */}
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-400 mb-2">Título de la Obra</label>
+                                <input name="titulo" type="text" required className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-zinc-400 mb-2">URL de Imagen</label>
+                                <input name="imagen_url" type="url" placeholder="Opcional" className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl" />
+                            </div>
+                            <button type="submit" disabled={uploading} className="w-full py-4 bg-accent text-black font-bold rounded-xl disabled:opacity-50">
+                                {uploading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Subir al Portfolio"}
+                            </button>
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Modal de Rechazo */}
+            {rejectionTurnoId && (
+                <RejectionModal
+                    turnoId={rejectionTurnoId}
+                    clientName={rejectionClientName}
+                    onClose={() => setRejectionTurnoId(null)}
+                    onReject={submitReject}
+                />
             )}
         </div>
     );

@@ -86,10 +86,15 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
     useEffect(() => {
         if (selectedDate && availabilityBlocks) {
             // "T00:00:00" ensures JS gets the local date correctly if interpreted as YYYY-MM-DD
-            const dateObj = new Date(selectedDate + "T00:00:00");
+            const [year, month, day] = selectedDate.split('-');
+            const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
             const dayIndex = dateObj.getDay(); 
             
-            const validBlocks = availabilityBlocks.filter(b => b.dias.includes(dayIndex));
+            console.log("Día seleccionado (0=Dom, 1=Lun...):", dayIndex);
+            
+            const validBlocks = availabilityBlocks.filter(b => b.dias.map(Number).includes(dayIndex));
+            console.log("Bloque encontrado:", validBlocks);
+            
             setArtistWorkingDay(validBlocks.length > 0);
             
             let franjasDelDia: { label: string, inicio: string, fin: string }[] = [];

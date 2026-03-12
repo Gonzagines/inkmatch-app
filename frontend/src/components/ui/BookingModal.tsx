@@ -32,8 +32,8 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
     const [availabilityBlocks, setAvailabilityBlocks] = useState<{ dias: number[], franjas?: { inicio: string, fin: string }[], inicio?: string, fin?: string }[] | null>(null);
     const [selectedDate, setSelectedDate] = useState("");
     const [artistWorkingDay, setArtistWorkingDay] = useState(true);
-    const [selectedShift, setSelectedShift] = useState<'Mañana' | 'Tarde' | null>(null);
-    const [availableShifts, setAvailableShifts] = useState({ morning: true, afternoon: true });
+    const [selectedShift, setSelectedShift] = useState<string | null>(null);
+    const [availableFranjas, setAvailableFranjas] = useState<{ label: string, inicio: string, fin: string }[]>([]);
     
     // Step 2: Uploads and Idea
     const [bodyPhotoUrl, setBodyPhotoUrl] = useState<string>("");
@@ -78,32 +78,43 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
             setStep(1); setSelectedDate(""); setSelectedShift(null);
             setBodyPhotoUrl(""); setDesignPhotoUrl(""); setDesignIdea("");
             setAiPrompt(""); setGeneratedImageUrl(""); setArtistWorkingDay(true);
-            setAvailableShifts({ morning: true, afternoon: true });
+            setAvailableFranjas([]);
         }
     }, [isOpen, artistId]);
 
     // Handle Date Change Logic
     useEffect(() => {
         if (selectedDate && availabilityBlocks) {
+            // "T00:00:00" ensures JS gets the local date correctly if interpreted as YYYY-MM-DD
             const dateObj = new Date(selectedDate + "T00:00:00");
             const dayIndex = dateObj.getDay(); 
             
             const validBlocks = availabilityBlocks.filter(b => b.dias.includes(dayIndex));
             setArtistWorkingDay(validBlocks.length > 0);
             
-            let canMorning = false;
-            let canAfternoon = false;
-            
+            let franjasDelDia: { label: string, inicio: string, fin: string }[] = [];
             validBlocks.forEach(b => {
                 const franjas = b.franjas || [{ inicio: b.inicio, fin: b.fin }];
                 franjas.forEach((f: any) => {
-                    if (f.inicio <= '14:00' && f.fin >= '10:00') canMorning = true;
-                    if (f.inicio <= '19:00' && f.fin >= '15:00') canAfternoon = true;
+                    if (!f.inicio || !f.fin) return;
+                    
+                    const formatTime = (t: string) => t.substring(0, 5); // 09:00:00 -> 09:00
+                    const i = formatTime(f.inicio);
+                    const e = formatTime(f.fin);
+                    
+                    const label = i < '14:00' ? 'Mañana' : 'Tarde';
+                    franjasDelDia.push({ label, inicio: i, fin: e });
                 });
             });
 
-            setAvailableShifts({ morning: canMorning, afternoon: canAfternoon });
+            // Ordenamos las franjas por horario de inicio
+            franjasDelDia.sort((a, b) => a.inicio.localeCompare(b.inicio));
+            
+            setAvailableFranjas(franjasDelDia);
             setSelectedShift(null);
+        } else {
+            setArtistWorkingDay(true);
+            setAvailableFranjas([]);    
         }
     }, [selectedDate, availabilityBlocks]);
 
@@ -242,28 +253,23 @@ export function BookingModal({ isOpen, onClose, artistName, artistId }: BookingM
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <button 
-                                    onClick={() => setSelectedShift('Mañana')}
-                                    disabled={!selectedDate || !artistWorkingDay || !availableShifts.morning}
-                                    className={`p-4 rounded-xl font-bold transition-all ${
-                                        selectedShift === 'Mañana' 
-                                            ? 'bg-accent text-black shadow-emerald' 
-                                            : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:border-white/20'
-                                    } disabled:opacity-30 disabled:cursor-not-allowed`}
-                                >
-                                    Mañana (10:00 - 14:00) {!availableShifts.morning && artistWorkingDay && <span className="block text-[10px] text-red-400 mt-1">Fuera de horario</span>}
-                                </button>
-                                <button 
-                                    onClick={() => setSelectedShift('Tarde')}
-                                    disabled={!selectedDate || !artistWorkingDay || !availableShifts.afternoon}
-                                    className={`p-4 rounded-xl font-bold transition-all ${
-                                        selectedShift === 'Tarde' 
-                                            ? 'bg-accent text-black shadow-emerald' 
-                                            : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:border-white/20'
-                                    } disabled:opacity-30 disabled:cursor-not-allowed`}
-                                >
-                                    Tarde (15:00 - 19:00) {!availableShifts.afternoon && artistWorkingDay && <span className="block text-[10px] text-red-400 mt-1">Fuera de horario</span>}
-                                </button>
+                                {availableFranjas.map((franja, idx) => {
+                                    const shiftText = `${franja.label} (${franja.inicio} - ${franja.fin})`;
+                                    return (
+                                        <button 
+                                            key={idx}
+                                            onClick={() => setSelectedShift(shiftText)}
+                                            disabled={!selectedDate || !artistWorkingDay}
+                                            className={`p-4 rounded-xl font-bold transition-all ${
+                                                selectedShift === shiftText 
+                                                    ? 'bg-accent text-black shadow-emerald' 
+                                                    : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:border-white/20'
+                                            } disabled:opacity-30 disabled:cursor-not-allowed text-sm`}
+                                        >
+                                            {shiftText}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

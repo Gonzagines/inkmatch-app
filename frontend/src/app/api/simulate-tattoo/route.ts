@@ -37,6 +37,12 @@ Respondé en español, con entusiasmo pero profesionalismo.`;
   );
 
   const data = await response.json();
+
+  if (!response.ok || data.error) {
+    const msg = data.error?.message || `Gemini error ${response.status}`;
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   return NextResponse.json({ text });
 }

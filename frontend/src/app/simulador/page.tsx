@@ -176,11 +176,11 @@ export default function SimuladorPage() {
       const data = await res.json();
 
       if (data.error) {
-        throw new Error(data.error.message || 'Error al contactar la IA');
+        throw new Error(typeof data.error === 'string' ? data.error : data.error.message || 'Error al contactar la IA');
       }
 
       const text = data.text;
-      if (!text) throw new Error('Respuesta inesperada de la IA');
+      if (!text) throw new Error('La IA no devolvió texto. Revisá que GEMINI_API_KEY esté configurada.');
 
       setResult(text);
     } catch (err: unknown) {

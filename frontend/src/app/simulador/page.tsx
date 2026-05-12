@@ -157,50 +157,20 @@ export default function SimuladorPage() {
     setLoading(true);
 
     try {
-      const bodyBase64 = await fileToBase64(bodyFile);
+      const zonaBase64 = await fileToBase64(bodyFile);
+      const zonaType = bodyFile.type;
 
-      // Build content array for Claude
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const contentBlocks: any[] = [
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: bodyFile.type, data: bodyBase64 },
-        },
-      ];
-
+      let disenoBase64: string | undefined;
+      let disenoType: string | undefined;
       if (designFile) {
-        const designBase64 = await fileToBase64(designFile);
-        contentBlocks.push({
-          type: 'image',
-          source: { type: 'base64', media_type: designFile.type, data: designBase64 },
-        });
+        disenoBase64 = await fileToBase64(designFile);
+        disenoType = designFile.type;
       }
-
-      contentBlocks.push({
-        type: 'text',
-        text: `Eres un experto tatuador y artista visual con 20 años de experiencia. Un cliente quiere saber cómo quedaría un tatuaje en su cuerpo.
-
-${designFile ? 'Te comparto dos imágenes: la primera es la zona del cuerpo donde se quiere tatuar, y la segunda es el diseño de referencia.' : 'Te comparto una imagen de la zona del cuerpo donde se quiere tatuar.'}
-
-Descripción del tatuaje deseado: "${description}"
-
-Por favor, analizá la zona del cuerpo y proporcioná:
-
-1. **Evaluación de la zona**: ¿Es una buena área para tatuar? ¿Qué consideraciones de anatomía hay que tener en cuenta?
-2. **Cómo quedaría el tatuaje**: Describí con detalle visual cómo se vería el diseño en esa zona específica (tamaño ideal, orientación, adaptación a la curvatura del cuerpo).
-3. **Estilo recomendado**: ¿Qué estilo artístico quedaría mejor considerando la descripción y la zona?
-4. **Consejos prácticos**: Tamaño óptimo, nivel de dolor estimado para esa zona, tiempo de cicatrización, cuidados específicos.
-5. **Rating de compatibilidad**: Una puntuación del 1 al 10 sobre qué tan bien se adaptaría el diseño a esa zona.
-
-Respondé de manera profesional pero amigable, en español.`,
-      });
-
-      const messages = [{ role: 'user', content: contentBlocks }];
 
       const res = await fetch('/api/simulate-tattoo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ description, zonaBase64, zonaType, disenoBase64, disenoType }),
       });
 
       const data = await res.json();
@@ -209,7 +179,7 @@ Respondé de manera profesional pero amigable, en español.`,
         throw new Error(data.error.message || 'Error al contactar la IA');
       }
 
-      const text = data.content?.[0]?.text;
+      const text = data.text;
       if (!text) throw new Error('Respuesta inesperada de la IA');
 
       setResult(text);
@@ -409,7 +379,7 @@ Respondé de manera profesional pero amigable, en español.`,
 }
 
 // ─── Result renderer ──────────────────────────────────────────────────────────
-// Converts Claude's markdown-ish response into styled JSX
+// Converts Gemini's markdown-ish response into styled JSX
 
 function ResultText({ text }: { text: string }) {
   const lines = text.split('\n');
